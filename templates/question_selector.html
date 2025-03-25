@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head><title>Select a Question</title></head>
+<body>
+    <h2>Select a Coding Question</h2>
+    <ul>
+        {% for q in questions %}
+            <li>
+                <a href="{{ url_for('show_editor', question_id=q.id) }}">{{ q.title }}</a>
+            </li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

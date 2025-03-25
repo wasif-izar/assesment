@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Code Editor with Judge0</title>
+    <title>{{ question.title }} | Code Editor</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.js"></script>
     <style>
         body {
@@ -91,8 +91,9 @@
 </head>
 <body>
     <div class="container">
-        <h1>Code Execution with Judge0 API</h1>
-        
+        <h1>{{ question.title }}</h1>
+        <p><strong>Description:</strong> {{ question.description }}</p>
+
         <div class="editor-container">
             <div class="code-section">
                 <div class="controls">
@@ -104,7 +105,7 @@
                     </select>
                     <button id="run-btn">Run Code</button>
                 </div>
-                <div id="editor">print("Hello, World!")</div>
+                <div id="editor">{{ question.starter_code | e }}</div>
                 <h3>Input (stdin):</h3>
                 <textarea id="stdin" rows="3" style="width: 100%"></textarea>
             </div>
@@ -126,16 +127,15 @@
     </div>
 
     <script>
-        // Initialize Ace Editor
         const editor = ace.edit("editor");
         editor.setTheme("ace/theme/monokai");
         editor.session.setMode("ace/mode/python");
-        
+
         // Webcam setup
         const video = document.getElementById('webcam');
         const captureBtn = document.getElementById('capture-btn');
         const detectionResult = document.getElementById('detection-result');
-        
+
         navigator.mediaDevices.getUserMedia({ video: true })
             .then(stream => {
                 video.srcObject = stream;
@@ -144,19 +144,17 @@
                 console.error("Error accessing webcam:", err);
                 detectionResult.innerHTML = "Could not access webcam: " + err.message;
             });
-        
+
         captureBtn.addEventListener('click', () => {
             const canvas = document.createElement('canvas');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             canvas.getContext('2d').drawImage(video, 0, 0);
             const imageData = canvas.toDataURL('image/png');
-            
+
             fetch('/upload_webcam', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ image: imageData })
             })
             .then(response => response.json())
@@ -171,50 +169,48 @@
                 detectionResult.innerHTML = "Error processing image";
             });
         });
-        
+
         // Code execution
         document.getElementById('run-btn').addEventListener('click', executeCode);
-        
+
         async function executeCode() {
             const code = editor.getValue();
             const languageId = document.getElementById('language').value;
             const stdin = document.getElementById('stdin').value;
-            
+
             const outputDiv = document.getElementById('output');
             const statusDiv = document.getElementById('status');
             const statsDiv = document.getElementById('stats');
-            
+
             outputDiv.innerHTML = "Executing...";
             statusDiv.innerHTML = "";
             statusDiv.className = "status";
             statsDiv.innerHTML = "";
-            
+
             try {
                 const response = await fetch('/submit_code', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         code: code,
                         language_id: languageId,
                         stdin: stdin
                     })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.error) {
                     outputDiv.innerHTML = data.error;
                     statusDiv.innerHTML = "Error";
                     statusDiv.className = "status error";
                     return;
                 }
-                
+
                 outputDiv.innerHTML = data.output || data.error || "(No output)";
                 statusDiv.innerHTML = `Status: ${data.status}`;
                 statusDiv.className = `status ${data.status === 'Accepted' ? 'success' : 'error'}`;
-                
+
                 if (data.time || data.memory) {
                     statsDiv.innerHTML = `
                         <p>Time: ${data.time ? data.time + 's' : 'N/A'}</p>

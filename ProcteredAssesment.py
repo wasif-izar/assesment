@@ -25,26 +25,54 @@ app = Flask(__name__)
 # Judge0 API config
 JUDGE0_URL = "https://judge0-ce.p.rapidapi.com"
 HEADERS = {
-    "X-RapidAPI-Key": "d2cbc2bca7mshcfdb2fda562f0ffp1bd4a8jsnbf719a79c0b2",  # Replace with your real key
+    "X-RapidAPI-Key": "your_actual_rapidapi_key_here",  # Replace with your key
     "X-RapidAPI-Host": "judge0-ce.p.rapidapi.com",
     "Content-Type": "application/json"
 }
-MAX_RETRIES = 10  # Maximum polling attempts
-POLL_INTERVAL = 1  # Seconds between polls
+MAX_RETRIES = 10
+POLL_INTERVAL = 1
+
+# Coding Questions
+coding_questions = [
+    {
+        "id": 1,
+        "title": "Print Hello World",
+        "description": "Write a program that prints 'Hello, World!'",
+        "starter_code": "print('Hello, World!')"
+    },
+    {
+        "id": 2,
+        "title": "Sum of Two Numbers",
+        "description": "Write a function that returns the sum of two numbers.",
+        "starter_code": "def add(a, b):\n    return a + b"
+    },
+    {
+        "id": 3,
+        "title": "Check Palindrome",
+        "description": "Check if a given string is a palindrome.",
+        "starter_code": "def is_palindrome(s):\n    return s == s[::-1]"
+    }
+]
 
 @app.route("/")
 def index():
-    return render_template("code_editor.html")
+    return render_template("question_selector.html", questions=coding_questions)
+
+@app.route("/question/<int:question_id>")
+def show_editor(question_id):
+    question = next((q for q in coding_questions if q["id"] == question_id), None)
+    if question is None:
+        return "Question not found", 404
+    return render_template("code_editor.html", question=question)
 
 @app.route("/submit_code", methods=["POST"])
 def submit_code():
     try:
         data = request.json
         source_code = data.get("code", "")
-        language_id = data.get("language_id", 71)  # Default: Python 3
-        stdin = data.get("stdin", "")  # Optional input
-        
-        # Prepare submission
+        language_id = data.get("language_id", 71)
+        stdin = data.get("stdin", "")
+
         submission = {
             "language_id": language_id,
             "source_code": source_code,
@@ -52,31 +80,28 @@ def submit_code():
             "redirect_stderr_to_stdout": True
         }
 
-        # Submit code
-        submit_response = requests.post(
+        response = requests.post(
             f"{JUDGE0_URL}/submissions?base64_encoded=false&wait=false",
             json=submission,
             headers=HEADERS
         )
-        submit_response.raise_for_status()
-        token = submit_response.json()["token"]
+        response.raise_for_status()
+        token = response.json()["token"]
 
-        # Poll for results
         result_url = f"{JUDGE0_URL}/submissions/{token}?base64_encoded=false"
         for _ in range(MAX_RETRIES):
             result_response = requests.get(result_url, headers=HEADERS)
             result_response.raise_for_status()
             result_json = result_response.json()
-            
+
             status = result_json["status"]["description"]
             if status not in ["In Queue", "Processing"]:
                 break
-                
+
             time.sleep(POLL_INTERVAL)
         else:
             return jsonify({"error": "Timeout waiting for execution result"}), 408
 
-        # Format response
         response_data = {
             "output": result_json.get("stdout", ""),
             "error": result_json.get("stderr", ""),
@@ -84,7 +109,7 @@ def submit_code():
             "time": result_json.get("time"),
             "memory": result_json.get("memory")
         }
-        
+
         return jsonify(response_data)
 
     except requests.exceptions.RequestException as e:
@@ -95,10 +120,9 @@ def submit_code():
 @app.route("/upload_webcam", methods=["POST"])
 def upload_webcam():
     data = request.json
-    image_data = data["image"].split(",")[1]  # Remove the data URL header
+    image_data = data["image"].split(",")[1]
     image_bytes = base64.b64decode(image_data)
 
-    # Save image to disk
     if not os.path.exists("webcam_captures"):
         os.makedirs("webcam_captures")
 
@@ -106,9 +130,7 @@ def upload_webcam():
     with open(image_path, "wb") as f:
         f.write(image_bytes)
 
-    # Run AI Model on Image
     result = detect_suspicious_activity(image_path)
-
     return jsonify({"status": "success", "message": "Webcam image saved!", "suspicious": result})
 
 def detect_suspicious_activity(image_path):
