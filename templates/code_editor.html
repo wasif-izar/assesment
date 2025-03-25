@@ -105,11 +105,11 @@
                     </select>
                     <button id="run-btn">Run Code</button>
                 </div>
-                <div id="editor">{{ question.starter_code | e }}</div>
+                <div id="editor"></div>
                 <h3>Input (stdin):</h3>
                 <textarea id="stdin" rows="3" style="width: 100%"></textarea>
             </div>
-            
+
             <div class="output-section">
                 <h3>Output:</h3>
                 <div id="output"></div>
@@ -117,12 +117,16 @@
                 <div id="stats"></div>
             </div>
         </div>
-        
+
         <div class="webcam-container">
             <h2>Suspicious Activity Detection</h2>
             <video id="webcam" autoplay playsinline></video>
             <button id="capture-btn">Capture Image</button>
             <div id="detection-result"></div>
+        </div>
+
+        <div style="margin-top: 20px;">
+            <a href="/result" style="font-weight: bold;">View Total Score</a>
         </div>
     </div>
 
@@ -130,6 +134,7 @@
         const editor = ace.edit("editor");
         editor.setTheme("ace/theme/monokai");
         editor.session.setMode("ace/mode/python");
+        editor.setValue({{ question.starter_code | tojson | safe }}, 1);  // Sets initial code
 
         // Webcam setup
         const video = document.getElementById('webcam');
@@ -170,7 +175,6 @@
             });
         });
 
-        // Code execution
         document.getElementById('run-btn').addEventListener('click', executeCode);
 
         async function executeCode() {
@@ -194,7 +198,8 @@
                     body: JSON.stringify({
                         code: code,
                         language_id: languageId,
-                        stdin: stdin
+                        stdin: stdin,
+                        question_id: {{ question.id | tojson }}
                     })
                 });
 
@@ -208,7 +213,7 @@
                 }
 
                 outputDiv.innerHTML = data.output || data.error || "(No output)";
-                statusDiv.innerHTML = `Status: ${data.status}`;
+                statusDiv.innerHTML = `Status: ${data.status} | Marks: ${data.score}/10`;
                 statusDiv.className = `status ${data.status === 'Accepted' ? 'success' : 'error'}`;
 
                 if (data.time || data.memory) {
