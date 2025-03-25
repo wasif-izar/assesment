@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MCQ Quiz</title>
+    <script>
+        let warningCount = 0; // Track suspicious activity
+        let timeLeft = 10; // Set quiz time in seconds (5 minutes)
+
+        // **1. Detect Tab Switching**
+        document.addEventListener("visibilitychange", function() {
+            if (document.hidden) {
+                warningCount++;
+                alert("Warning: Switching tabs is not allowed!");
+                if (warningCount >= 3) {
+                    alert("You have switched tabs multiple times. Your quiz may be flagged!");
+                }
+            }
+        });
+
+        // **2. Capture Webcam Images Periodically**
+        function captureWebcam() {
+            const video = document.createElement("video");
+            video.width = 320;
+            video.height = 240;
+
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(stream => {
+                    video.srcObject = stream;
+                    video.play();
+
+                    setInterval(() => {
+                        const canvas = document.createElement("canvas");
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        const ctx = canvas.getContext("2d");
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                        const imageData = canvas.toDataURL("image/png");
+
+                        // Send image to Flask backend
+                        fetch("/upload_webcam", {
+                            method: "POST",
+                            body: JSON.stringify({ image: imageData }),
+                            headers: { "Content-Type": "application/json" }
+                        });
+                    }, 10000); // Capture every 10 seconds
+                })
+                .catch(error => console.error("Webcam access denied:", error));
+        }
+
+        // **3. Timer Functionality**
+        function updateTimer() {
+            let minutes = Math.floor(timeLeft / 60);
+            let seconds = timeLeft % 60;
+            document.getElementById("timer").innerText = `Time Left: ${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
+
+            if (timeLeft === 30) { 
+                alert("⚠️ You have 30 seconds left!"); 
+            }
+            
+            if (timeLeft <= 0) {
+                alert("⏳ Time is up! Submitting your quiz...");
+                document.getElementById("quizForm").submit(); // Auto-submit when time ends
+            } else {
+                timeLeft--;
+                setTimeout(updateTimer, 1000); // Update timer every second
+            }
+        }
+
+        window.onload = function() {
+            captureWebcam(); // Start proctoring
+            updateTimer(); // Start countdown
+        };
+    </script>
+</head>
+<body>
+    <h1>MCQ Quiz</h1>
+    <h3 id="timer">Time Left: 5:00</h3> <!-- Timer display -->
+
+    <form method="post" id="quizForm">
+        {% for i, q in enumerate(questions) %}
+            <p>{{ q.question }}</p>
+            {% for option in q.options %}
+                <input type="radio" name="q{{ i }}" value="{{ option }}"> {{ option }}<br>
+            {% endfor %}
+        {% endfor %}
+        <br>
+        <button type="submit">Submit</button>
+    </form>
+</body>
+</html>
