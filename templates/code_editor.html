@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code Editor with Judge0</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            max-width: 1200px;
+            margin: 0 auto;
+            gap: 20px;
+        }
+        .editor-container {
+            display: flex;
+            gap: 20px;
+        }
+        .code-section, .output-section {
+            flex: 1;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 15px;
+        }
+        #editor {
+            height: 400px;
+            width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        #output {
+            height: 400px;
+            width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            background: #f8f8f8;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        select, button, textarea {
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .webcam-container {
+            margin-top: 20px;
+        }
+        #webcam {
+            background: #ddd;
+            width: 100%;
+            max-width: 640px;
+            border-radius: 4px;
+        }
+        .status {
+            margin-top: 10px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .success {
+            background: #dff0d8;
+            color: #3c763d;
+        }
+        .error {
+            background: #f2dede;
+            color: #a94442;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Code Execution with Judge0 API</h1>
+        
+        <div class="editor-container">
+            <div class="code-section">
+                <div class="controls">
+                    <select id="language">
+                        <option value="71">Python (3.8.1)</option>
+                        <option value="62">Java</option>
+                        <option value="63">JavaScript</option>
+                        <option value="54">C++</option>
+                    </select>
+                    <button id="run-btn">Run Code</button>
+                </div>
+                <div id="editor">print("Hello, World!")</div>
+                <h3>Input (stdin):</h3>
+                <textarea id="stdin" rows="3" style="width: 100%"></textarea>
+            </div>
+            
+            <div class="output-section">
+                <h3>Output:</h3>
+                <div id="output"></div>
+                <div id="status" class="status"></div>
+                <div id="stats"></div>
+            </div>
+        </div>
+        
+        <div class="webcam-container">
+            <h2>Suspicious Activity Detection</h2>
+            <video id="webcam" autoplay playsinline></video>
+            <button id="capture-btn">Capture Image</button>
+            <div id="detection-result"></div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Ace Editor
+        const editor = ace.edit("editor");
+        editor.setTheme("ace/theme/monokai");
+        editor.session.setMode("ace/mode/python");
+        
+        // Webcam setup
+        const video = document.getElementById('webcam');
+        const captureBtn = document.getElementById('capture-btn');
+        const detectionResult = document.getElementById('detection-result');
+        
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                video.srcObject = stream;
+            })
+            .catch(err => {
+                console.error("Error accessing webcam:", err);
+                detectionResult.innerHTML = "Could not access webcam: " + err.message;
+            });
+        
+        captureBtn.addEventListener('click', () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const imageData = canvas.toDataURL('image/png');
+            
+            fetch('/upload_webcam', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ image: imageData })
+            })
+            .then(response => response.json())
+            .then(data => {
+                detectionResult.innerHTML = data.suspicious 
+                    ? "⚠️ Suspicious activity detected!" 
+                    : "✅ No suspicious activity detected";
+                detectionResult.style.color = data.suspicious ? 'red' : 'green';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                detectionResult.innerHTML = "Error processing image";
+            });
+        });
+        
+        // Code execution
+        document.getElementById('run-btn').addEventListener('click', executeCode);
+        
+        async function executeCode() {
+            const code = editor.getValue();
+            const languageId = document.getElementById('language').value;
+            const stdin = document.getElementById('stdin').value;
+            
+            const outputDiv = document.getElementById('output');
+            const statusDiv = document.getElementById('status');
+            const statsDiv = document.getElementById('stats');
+            
+            outputDiv.innerHTML = "Executing...";
+            statusDiv.innerHTML = "";
+            statusDiv.className = "status";
+            statsDiv.innerHTML = "";
+            
+            try {
+                const response = await fetch('/submit_code', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        code: code,
+                        language_id: languageId,
+                        stdin: stdin
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    outputDiv.innerHTML = data.error;
+                    statusDiv.innerHTML = "Error";
+                    statusDiv.className = "status error";
+                    return;
+                }
+                
+                outputDiv.innerHTML = data.output || data.error || "(No output)";
+                statusDiv.innerHTML = `Status: ${data.status}`;
+                statusDiv.className = `status ${data.status === 'Accepted' ? 'success' : 'error'}`;
+                
+                if (data.time || data.memory) {
+                    statsDiv.innerHTML = `
+                        <p>Time: ${data.time ? data.time + 's' : 'N/A'}</p>
+                        <p>Memory: ${data.memory ? data.memory + 'KB' : 'N/A'}</p>
+                    `;
+                }
+            } catch (error) {
+                outputDiv.innerHTML = "Failed to execute code: " + error.message;
+                statusDiv.innerHTML = "Error";
+                statusDiv.className = "status error";
+            }
+        }
+    </script>
+</body>
+</html>
