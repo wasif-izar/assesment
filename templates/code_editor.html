@@ -121,7 +121,6 @@
         <div class="webcam-container">
             <h2>Suspicious Activity Detection</h2>
             <video id="webcam" autoplay playsinline></video>
-            <button id="capture-btn">Capture Image</button>
             <div id="detection-result"></div>
         </div>
 
@@ -134,46 +133,48 @@
         const editor = ace.edit("editor");
         editor.setTheme("ace/theme/monokai");
         editor.session.setMode("ace/mode/python");
-        editor.setValue({{ question.starter_code | tojson | safe }}, 1);  // Sets initial code
+        editor.setValue({{ question.starter_code | tojson | safe }}, 1);
 
-        // Webcam setup
         const video = document.getElementById('webcam');
-        const captureBtn = document.getElementById('capture-btn');
         const detectionResult = document.getElementById('detection-result');
 
         navigator.mediaDevices.getUserMedia({ video: true })
             .then(stream => {
                 video.srcObject = stream;
+                startMonitoring();
             })
             .catch(err => {
                 console.error("Error accessing webcam:", err);
                 detectionResult.innerHTML = "Could not access webcam: " + err.message;
             });
 
-        captureBtn.addEventListener('click', () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            canvas.getContext('2d').drawImage(video, 0, 0);
-            const imageData = canvas.toDataURL('image/png');
+        function startMonitoring() {
+            setInterval(() => {
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0);
+                const imageData = canvas.toDataURL('image/png');
 
-            fetch('/upload_webcam', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image: imageData })
-            })
-            .then(response => response.json())
-            .then(data => {
-                detectionResult.innerHTML = data.suspicious 
-                    ? "⚠️ Suspicious activity detected!" 
-                    : "✅ No suspicious activity detected";
-                detectionResult.style.color = data.suspicious ? 'red' : 'green';
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                detectionResult.innerHTML = "Error processing image";
-            });
-        });
+                fetch('/upload_webcam', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imageData })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    detectionResult.innerHTML = data.suspicious 
+                        ? "⚠️ Suspicious activity detected!" 
+                        : "✅ No suspicious activity detected";
+                    detectionResult.style.color = data.suspicious ? 'red' : 'green';
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    detectionResult.innerHTML = "Error processing image";
+                });
+            }, 8000);
+        }
 
         document.getElementById('run-btn').addEventListener('click', executeCode);
 

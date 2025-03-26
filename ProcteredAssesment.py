@@ -143,9 +143,10 @@ def show_result():
 @app.route("/upload_webcam", methods=["POST"])
 def upload_webcam():
     data = request.json
-    image_data = data["image"].split(",")[1]
+    image_data = data["image"].split(",")[1]  # Remove the data URL header
     image_bytes = base64.b64decode(image_data)
 
+    # Save image to disk
     if not os.path.exists("webcam_captures"):
         os.makedirs("webcam_captures")
 
@@ -153,37 +154,50 @@ def upload_webcam():
     with open(image_path, "wb") as f:
         f.write(image_bytes)
 
+    # Run AI Model on Image
     result = detect_suspicious_activity(image_path)
+
     return jsonify({"status": "success", "message": "Webcam image saved!", "suspicious": result})
 
+
 def detect_suspicious_activity(image_path):
-    img = cv2.imread(image_path)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img = torch.from_numpy(img).float().to(device)
-    img = img.permute(2, 0, 1)
-    img = img.unsqueeze(0)
-    img /= 255.0
+    img = cv2.imread(image_path)  # Load image
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB
+    img = torch.from_numpy(img).float().to(device)  # Convert to Tensor
+
+    img = img.permute(2, 0, 1)  # Change shape from (H, W, C) to (C, H, W)
+    img = img.unsqueeze(0)  # Add batch dimension (1, C, H, W)
+    img /= 255.0  # Normalize to [0,1]
 
     with torch.no_grad():
-        pred = model(img)[0]
+        pred = model(img)[0]  # Get predictions
 
     pred = non_max_suppression(pred, 0.4, 0.5)
-    suspicious_classes = {67, 73, 77}
+
+    suspicious_classes = {67, 73, 77}  # Phone, laptop, book
     person_count = 0
 
     for det in pred:
         if det is not None and len(det):
             for *xyxy, conf, cls in det:
-                class_id = int(cls.item())  
+                class_id = int(cls.item())
                 if class_id == 0:
-                    person_count += 1
+                    person_count += 1  # Count people
                 if class_id in suspicious_classes:
+                    print(f"⚠️ Suspicious Object Detected: Class {class_id}")
                     return True
 
-    if person_count == 0 or person_count > 1:
+    if person_count == 0:
+        print("⚠️ No person detected! Suspicious activity.")
         return True
 
+    if person_count > 1:
+        print("⚠️ Multiple people detected! Suspicious activity.")
+        return True
+
+    print("✅ Person detected. No suspicious activity.")
     return False
+
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")
